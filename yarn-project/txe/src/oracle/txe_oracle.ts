@@ -1,6 +1,8 @@
 import {
   AuthWitness,
   MerkleTreeId,
+  MerkleTreeReadOperations,
+  type MerkleTreeWriteOperations,
   Note,
   type NoteStatus,
   NullifierMembershipWitness,
@@ -34,7 +36,7 @@ import {
   type PrivateLog,
   PublicDataTreeLeaf,
   type PublicDataTreeLeafPreimage,
-  type PublicDataWrite,
+  PublicDataWrite,
   computeContractClassId,
   computeTaggingSecretPoint,
   deriveKeys,
@@ -85,7 +87,7 @@ import {
   resolveAssertionMessageFromError,
 } from '@aztec/simulator/server';
 import { NoopTelemetryClient } from '@aztec/telemetry-client/noop';
-import { MerkleTreeSnapshotOperationsFacade, type MerkleTrees } from '@aztec/world-state';
+import { type MerkleTrees, type NativeWorldStateService } from '@aztec/world-state';
 
 import { TXENode } from '../node/txe_node.js';
 import { type TXEDatabase } from '../util/txe_database.js';
@@ -108,6 +110,11 @@ export class TXE implements TypedOracle {
   private version: Fr = Fr.ONE;
   private chainId: Fr = Fr.ONE;
 
+  private manuallyCreatedNoteHashes: Fr[] = [];
+  private manuallyCreatedNullifiers: Fr[] = [];
+
+  private publicDataWrites: PublicDataWrite[] = [];
+
   private uniqueNoteHashesFromPublic: Fr[] = [];
   private siloedNullifiersFromPublic: Fr[] = [];
   private privateLogs: PrivateLog[] = [];
@@ -129,6 +136,8 @@ export class TXE implements TypedOracle {
     private executionCache: HashedValuesCache,
     private keyStore: KeyStore,
     private txeDatabase: TXEDatabase,
+    private nativeWorldStateService: NativeWorldStateService,
+    private baseFork: MerkleTreeWriteOperations,
   ) {
     this.noteCache = new ExecutionNoteCache(this.getTxRequestHash());
     this.contractDataOracle = new ContractDataOracle(txeDatabase);
@@ -148,12 +157,12 @@ export class TXE implements TypedOracle {
 
   // Utils
 
-  async #getTreesAt(blockNumber: number) {
-    const db =
-      blockNumber === (await this.getBlockNumber())
-        ? await this.trees.getLatest()
-        : new MerkleTreeSnapshotOperationsFacade(this.trees, blockNumber);
-    return db;
+  getNativeWorldStateService() {
+    return this.nativeWorldStateService;
+  }
+
+  getBaseFork() {
+    return this.baseFork;
   }
 
   getChainId() {
@@ -227,10 +236,10 @@ export class TXE implements TypedOracle {
     sideEffectsCounter = this.sideEffectCounter,
     isStaticCall = false,
   ) {
-    const db = await this.#getTreesAt(blockNumber);
-    const previousBlockState = await this.#getTreesAt(blockNumber - 1);
+    const snap = this.nativeWorldStateService.getSnapshot(blockNumber);
+    const previousBlockState = this.nativeWorldStateService.getSnapshot(blockNumber - 1);
 
-    const stateReference = await db.getStateReference();
+    const stateReference = await snap.getStateReference();
     const inputs = PrivateContextInputs.empty();
     inputs.txContext.chainId = this.chainId;
     inputs.txContext.version = this.version;
@@ -258,11 +267,11 @@ export class TXE implements TypedOracle {
   }
 
   async addPublicDataWrites(writes: PublicDataWrite[]) {
-    const db = await this.trees.getLatest();
-    await db.batchInsert(
+    this.publicDataWrites.push(...writes);
+
+    await this.baseFork.sequentialInsert(
       MerkleTreeId.PUBLIC_DATA_TREE,
       writes.map(w => new PublicDataTreeLeaf(w.leafSlot, w.value).toBuffer()),
-      0,
     );
   }
 
@@ -396,19 +405,20 @@ export class TXE implements TypedOracle {
   }
 
   async getMembershipWitness(blockNumber: number, treeId: MerkleTreeId, leafValue: Fr): Promise<Fr[] | undefined> {
-    const db = await this.#getTreesAt(blockNumber);
-    const index = (await db.findLeafIndices(treeId, [leafValue.toBuffer()]))[0];
+    const snap = this.nativeWorldStateService.getSnapshot(blockNumber);
+    const index = (await snap.findLeafIndices(treeId, [leafValue.toBuffer()]))[0];
     if (index === undefined) {
       throw new Error(`Leaf value: ${leafValue} not found in ${MerkleTreeId[treeId]} at block ${blockNumber}`);
     }
-    const siblingPath = await db.getSiblingPath(treeId, index);
+    const siblingPath = await snap.getSiblingPath(treeId, index);
 
     return [new Fr(index), ...siblingPath.toFields()];
   }
 
   async getSiblingPath(blockNumber: number, treeId: MerkleTreeId, leafIndex: Fr) {
-    const committedDb = new MerkleTreeSnapshotOperationsFacade(this.trees, blockNumber);
-    const result = await committedDb.getSiblingPath(treeId, leafIndex.toBigInt());
+    const snap = this.nativeWorldStateService.getSnapshot(blockNumber);
+
+    const result = await snap.getSiblingPath(treeId, leafIndex.toBigInt());
     return result.toFields();
   }
 
@@ -416,14 +426,15 @@ export class TXE implements TypedOracle {
     blockNumber: number,
     nullifier: Fr,
   ): Promise<NullifierMembershipWitness | undefined> {
-    const db = await this.#getTreesAt(blockNumber);
-    const index = (await db.findLeafIndices(MerkleTreeId.NULLIFIER_TREE, [nullifier.toBuffer()]))[0];
+    const snap = this.nativeWorldStateService.getSnapshot(blockNumber);
+
+    const [index] = await snap.findLeafIndices(MerkleTreeId.NULLIFIER_TREE, [nullifier.toBuffer()]);
     if (!index) {
       return undefined;
     }
 
-    const leafPreimagePromise = db.getLeafPreimage(MerkleTreeId.NULLIFIER_TREE, index);
-    const siblingPathPromise = db.getSiblingPath<typeof NULLIFIER_TREE_HEIGHT>(
+    const leafPreimagePromise = snap.getLeafPreimage(MerkleTreeId.NULLIFIER_TREE, index);
+    const siblingPathPromise = snap.getSiblingPath<typeof NULLIFIER_TREE_HEIGHT>(
       MerkleTreeId.NULLIFIER_TREE,
       BigInt(index),
     );
@@ -438,16 +449,17 @@ export class TXE implements TypedOracle {
   }
 
   async getPublicDataTreeWitness(blockNumber: number, leafSlot: Fr): Promise<PublicDataWitness | undefined> {
-    const db = await this.#getTreesAt(blockNumber);
-    const lowLeafResult = await db.getPreviousValueIndex(MerkleTreeId.PUBLIC_DATA_TREE, leafSlot.toBigInt());
+    const snap = this.nativeWorldStateService.getSnapshot(blockNumber);
+
+    const lowLeafResult = await snap.getPreviousValueIndex(MerkleTreeId.PUBLIC_DATA_TREE, leafSlot.toBigInt());
     if (!lowLeafResult) {
       return undefined;
     } else {
-      const preimage = (await db.getLeafPreimage(
+      const preimage = (await snap.getLeafPreimage(
         MerkleTreeId.PUBLIC_DATA_TREE,
         lowLeafResult.index,
       )) as PublicDataTreeLeafPreimage;
-      const path = await db.getSiblingPath<typeof PUBLIC_DATA_TREE_HEIGHT>(
+      const path = await snap.getSiblingPath<typeof PUBLIC_DATA_TREE_HEIGHT>(
         MerkleTreeId.PUBLIC_DATA_TREE,
         lowLeafResult.index,
       );
@@ -459,8 +471,9 @@ export class TXE implements TypedOracle {
     blockNumber: number,
     nullifier: Fr,
   ): Promise<NullifierMembershipWitness | undefined> {
-    const committedDb = await this.#getTreesAt(blockNumber);
-    const findResult = await committedDb.getPreviousValueIndex(MerkleTreeId.NULLIFIER_TREE, nullifier.toBigInt());
+    const snap = this.nativeWorldStateService.getSnapshot(blockNumber);
+
+    const findResult = await snap.getPreviousValueIndex(MerkleTreeId.NULLIFIER_TREE, nullifier.toBigInt());
     if (!findResult) {
       return undefined;
     }
@@ -468,9 +481,9 @@ export class TXE implements TypedOracle {
     if (alreadyPresent) {
       this.logger.warn(`Nullifier ${nullifier.toBigInt()} already exists in the tree`);
     }
-    const preimageData = (await committedDb.getLeafPreimage(MerkleTreeId.NULLIFIER_TREE, index))!;
+    const preimageData = (await snap.getLeafPreimage(MerkleTreeId.NULLIFIER_TREE, index))!;
 
-    const siblingPath = await committedDb.getSiblingPath<typeof NULLIFIER_TREE_HEIGHT>(
+    const siblingPath = await snap.getSiblingPath<typeof NULLIFIER_TREE_HEIGHT>(
       MerkleTreeId.NULLIFIER_TREE,
       BigInt(index),
     );
@@ -478,10 +491,15 @@ export class TXE implements TypedOracle {
   }
 
   async getBlockHeader(blockNumber: number): Promise<BlockHeader | undefined> {
+    const snap = this.nativeWorldStateService.getSnapshot(blockNumber);
+
+    const previousBlockState = this.nativeWorldStateService.getSnapshot(blockNumber - 1);
+
     const header = BlockHeader.empty();
-    const db = await this.#getTreesAt(blockNumber);
-    header.state = await db.getStateReference();
     header.globalVariables.blockNumber = new Fr(blockNumber);
+    header.state = await snap.getStateReference();
+    header.lastArchive.root = Fr.fromBuffer((await previousBlockState.getTreeInfo(MerkleTreeId.ARCHIVE)).root);
+
     return header;
   }
 
@@ -574,9 +592,10 @@ export class TXE implements TypedOracle {
   }
 
   async checkNullifierExists(innerNullifier: Fr): Promise<boolean> {
+    const snap = this.nativeWorldStateService.getSnapshot(this.blockNumber - 1);
+
     const nullifier = siloNullifier(this.contractAddress, innerNullifier!);
-    const db = await this.trees.getLatest();
-    const index = (await db.findLeafIndices(MerkleTreeId.NULLIFIER_TREE, [nullifier.toBuffer()]))[0];
+    const [index] = await snap.findLeafIndices(MerkleTreeId.NULLIFIER_TREE, [nullifier.toBuffer()]);
     return index !== undefined;
   }
 
@@ -594,7 +613,13 @@ export class TXE implements TypedOracle {
     blockNumber: number,
     numberOfElements: number,
   ): Promise<Fr[]> {
-    const db = await this.#getTreesAt(blockNumber);
+    let db: MerkleTreeReadOperations;
+    if (blockNumber === this.blockNumber) {
+      db = this.baseFork;
+    } else {
+      db = this.nativeWorldStateService.getSnapshot(blockNumber);
+    }
+
     const values = [];
     for (let i = 0n; i < numberOfElements; i++) {
       const storageSlot = startStorageSlot.add(new Fr(i));
@@ -617,18 +642,19 @@ export class TXE implements TypedOracle {
   }
 
   async storageWrite(startStorageSlot: Fr, values: Fr[]): Promise<Fr[]> {
-    const db = await this.trees.getLatest();
-
     const publicDataWrites = values.map((value, i) => {
       const storageSlot = startStorageSlot.add(new Fr(i));
       this.logger.debug(`Oracle storage write: slot=${storageSlot.toString()} value=${value}`);
-      return new PublicDataTreeLeaf(computePublicDataTreeLeafSlot(this.contractAddress, storageSlot), value);
+      return new PublicDataWrite(computePublicDataTreeLeafSlot(this.contractAddress, storageSlot), value);
     });
-    await db.batchInsert(
-      MerkleTreeId.PUBLIC_DATA_TREE,
-      publicDataWrites.map(write => write.toBuffer()),
-      0,
-    );
+
+    // await db.batchInsert(
+    //   MerkleTreeId.PUBLIC_DATA_TREE,
+    //   publicDataWrites.map(write => write.toBuffer()),
+    //   0,
+    // );
+
+    await this.addPublicDataWrites(publicDataWrites);
     return publicDataWrites.map(write => write.value);
   }
 
@@ -806,8 +832,8 @@ export class TXE implements TypedOracle {
   private async executePublicFunction(args: Fr[], callContext: CallContext, isTeardown: boolean = false) {
     const executionRequest = new PublicExecutionRequest(callContext, args);
 
-    const db = await this.trees.getLatest();
-    const worldStateDb = new TXEWorldStateDB(db, new TXEPublicContractDataSource(this));
+    const db = this.baseFork;
+    const worldStateDb = new TXEWorldStateDB(db, new TXEPublicContractDataSource(this), this);
 
     const globalVariables = GlobalVariables.empty();
     globalVariables.chainId = this.chainId;
@@ -829,7 +855,7 @@ export class TXE implements TypedOracle {
 
     const simulator = new PublicTxSimulator(
       db,
-      new TXEWorldStateDB(db, new TXEPublicContractDataSource(this)),
+      new TXEWorldStateDB(db, new TXEPublicContractDataSource(this), this),
       new NoopTelemetryClient(),
       globalVariables,
     );
@@ -1041,16 +1067,14 @@ export class TXE implements TypedOracle {
   }
 
   async avmOpcodeStorageRead(slot: Fr) {
-    const db = await this.trees.getLatest();
-
     const leafSlot = computePublicDataTreeLeafSlot(this.contractAddress, slot);
 
-    const lowLeafResult = await db.getPreviousValueIndex(MerkleTreeId.PUBLIC_DATA_TREE, leafSlot.toBigInt());
+    const lowLeafResult = await this.baseFork.getPreviousValueIndex(MerkleTreeId.PUBLIC_DATA_TREE, leafSlot.toBigInt());
     if (!lowLeafResult || !lowLeafResult.alreadyPresent) {
       return Fr.ZERO;
     }
 
-    const preimage = (await db.getLeafPreimage(
+    const preimage = (await this.baseFork.getLeafPreimage(
       MerkleTreeId.PUBLIC_DATA_TREE,
       lowLeafResult.index,
     )) as PublicDataTreeLeafPreimage;
