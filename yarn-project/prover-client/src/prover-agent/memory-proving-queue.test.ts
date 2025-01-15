@@ -11,7 +11,7 @@ import { AbortError } from '@aztec/foundation/error';
 import { sleep } from '@aztec/foundation/sleep';
 import { NoopTelemetryClient } from '@aztec/telemetry-client/noop';
 
-import { InlineProofStore, type ProofStore } from '../proving_broker/proof_store.js';
+import { InlineProofStore, type ProofStore } from '../proving_broker/proof_store/index.js';
 import { MemoryProvingQueue } from './memory-proving-queue.js';
 
 describe('MemoryProvingQueue', () => {

@@ -24,7 +24,7 @@ import { NoopTelemetryClient } from '@aztec/telemetry-client/noop';
 import { jest } from '@jest/globals';
 
 import { MockProver } from '../test/mock_prover.js';
-import { type ProofStore } from './proof_store.js';
+import { type ProofStore } from './proof_store/index.js';
 import { ProvingAgent } from './proving_agent.js';
 
 describe('ProvingAgent', () => {

@@ -14,7 +14,7 @@ import { elapsed } from '@aztec/foundation/timer';
 import { Attributes, type TelemetryClient, type Traceable, type Tracer, trackSpan } from '@aztec/telemetry-client';
 import { NoopTelemetryClient } from '@aztec/telemetry-client/noop';
 
-import { InlineProofStore } from '../proving_broker/proof_store.js';
+import { InlineProofStore } from '../proving_broker/proof_store/index.js';
 
 const PRINT_THRESHOLD_NS = 6e10; // 60 seconds
 
