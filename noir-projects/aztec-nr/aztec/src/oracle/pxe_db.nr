@@ -42,6 +42,18 @@ where
     serialized_option.map(|arr| Deserialize::deserialize(arr))
 }
 
+#[oracle(move)]
+unconstrained fn move_oracle(
+    contract_address: AztecAddress,
+    src_key: Field,
+    dst_key: Field,
+    num_entries: u32,
+) {}
+
+pub unconstrained fn move(contract_address: AztecAddress, src_key: Field, dst_key: Field, num_entries: u32) {
+    move_oracle(contract_address, src_key, dst_key, num_entries);
+}
+
 mod test {
     use crate::{
         oracle::{pxe_db::{load, store}, random::random},

@@ -641,4 +641,9 @@ export class KVPxeDatabase implements PxeDatabase {
     }
     return values;
   }
+
+  async dbClear(contractAddress: AztecAddress, key: Fr): Promise<void> {
+    const dataKey = `${contractAddress.toString()}:${key.toString()}`;
+    this.#contractStore.delete(dataKey);
+  }
 }

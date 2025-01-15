@@ -231,4 +231,17 @@ export interface PxeDatabase extends ContractArtifactDatabase, ContractInstanceD
    * @returns An array of field elements representing the stored data or `null` if no data is stored under the key.
    */
   load(contract: AztecAddress, key: Fr): Promise<Fr[] | null>;
+
+  dbClear(contractAddress: AztecAddress, key: Fr): Promise<void>;
+
+  /**
+   * Used by contracts during execution to move entries stored in the local PXE database via `store`. This primitive
+   * allows for efficient data structures by avoiding repeated calls to `load` and `dbClear`.
+   *
+   * @param contractAddress
+   * @param srcKey
+   * @param dstKey
+   * @param numEntries
+   */
+  dbMove(contractAddress: AztecAddress, srcKey: Fr, dstKey: Fr, numEntries: number): Promise<void>;
 }

@@ -253,4 +253,12 @@ export abstract class TypedOracle {
   load(_contract: AztecAddress, _key: Fr): Promise<Fr[] | null> {
     throw new OracleMethodNotAvailableError('load');
   }
+
+  dbClear(_contractAddress: AztecAddress, _key: Fr): Promise<void> {
+    throw new OracleMethodNotAvailableError('dbClear');
+  }
+
+  dbMove(_contractAddress: AztecAddress, _srcKey: Fr, _dstKey: Fr, _numEntries: number): Promise<void> {
+    throw new OracleMethodNotAvailableError('dbMove');
+  }
 }

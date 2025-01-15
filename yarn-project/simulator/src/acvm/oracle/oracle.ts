@@ -412,8 +412,8 @@ export class Oracle {
     return toACVMField(true);
   }
 
-  async store([contract]: ACVMField[], [key]: ACVMField[], values: ACVMField[]) {
-    const processedContract = AztecAddress.fromField(fromACVMField(contract));
+  async store([contractAddress]: ACVMField[], [key]: ACVMField[], values: ACVMField[]) {
+    const processedContract = AztecAddress.fromField(fromACVMField(contractAddress));
     const processedKey = fromACVMField(key);
     const processedValues = values.map(fromACVMField);
     logger.debug(`Storing data for key ${processedKey} in contract ${processedContract}. Data: [${processedValues}]`);
@@ -427,8 +427,12 @@ export class Oracle {
    * @param tSize - The size of the serialized object to return.
    * @returns The data found flag and the serialized object concatenated in one array.
    */
-  async load([contract]: ACVMField[], [key]: ACVMField[], [tSize]: ACVMField[]): Promise<(ACVMField | ACVMField[])[]> {
-    const processedContract = AztecAddress.fromField(fromACVMField(contract));
+  async load(
+    [contractAddress]: ACVMField[],
+    [key]: ACVMField[],
+    [tSize]: ACVMField[],
+  ): Promise<(ACVMField | ACVMField[])[]> {
+    const processedContract = AztecAddress.fromField(fromACVMField(contractAddress));
     const processedKey = fromACVMField(key);
     const values = await this.typedOracle.load(processedContract, processedKey);
     if (values === null) {
@@ -441,5 +445,30 @@ export class Oracle {
       logger.debug(`Returning data for key ${processedKey} in contract ${processedContract}. Data: [${values}]`);
       return [toACVMField(1), values.map(toACVMField)];
     }
+  }
+
+  async dbClear([contractAddress]: ACVMField[], [key]: ACVMField[]) {
+    await this.typedOracle.dbClear(AztecAddress.fromField(fromACVMField(contractAddress)), fromACVMField(key));
+  }
+
+  /**
+   * Move contiguous entries in the PXE DB.
+   * @param contract - The contract address.
+   * @param srcKey - The key of the first entry to move.
+   * @param dstKey - The key where to place the first moved entry.
+   * @param numEntries - The number of entries to move.
+   */
+  async dbMove(
+    [contractAddress]: ACVMField[],
+    [srcKey]: ACVMField[],
+    [dstKey]: ACVMField[],
+    [numEntries]: ACVMField[],
+  ) {
+    await this.typedOracle.dbMove(
+      AztecAddress.fromField(fromACVMField(contractAddress)),
+      fromACVMField(srcKey),
+      fromACVMField(dstKey),
+      frToNumber(fromACVMField(numEntries)),
+    );
   }
 }
