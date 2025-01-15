@@ -472,7 +472,7 @@ export async function setup(
   }
   config.l1PublishRetryIntervalMS = 100;
 
-  const telemetry = await telemetryPromise;
+  const telemetry = await getTelemetryClient(opts.telemetryConfig);
 
   const blobSinkClient = createBlobSinkClient(config.blobSinkUrl);
   const publisher = new TestL1Publisher(config, { telemetry, blobSinkClient });
