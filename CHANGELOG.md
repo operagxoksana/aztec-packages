@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.71.0](https://github.com/AztecProtocol/aztec-packages/compare/aztec-packages-v0.70.0...aztec-packages-v0.71.0) (2025-01-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* Attestation collection times out based on sequencer timetable ([#11248](https://github.com/AztecProtocol/aztec-packages/issues/11248))
+
+### Features
+
+* **docs:** Algolia-&gt;typesense ([#11034](https://github.com/AztecProtocol/aztec-packages/issues/11034)) ([d254f49](https://github.com/AztecProtocol/aztec-packages/commit/d254f497345ef4dd69d5cfdb58705c34e58a65cf))
+* Reenable constrained config for roots ([#10605](https://github.com/AztecProtocol/aztec-packages/issues/10605)) ([a6ebc2e](https://github.com/AztecProtocol/aztec-packages/commit/a6ebc2e7dc453e55ad3b3872f1d78b9fa0b8abdf))
+
+
+### Bug Fixes
+
+* References to a3 in docs ([#11256](https://github.com/AztecProtocol/aztec-packages/issues/11256)) ([caf88fa](https://github.com/AztecProtocol/aztec-packages/commit/caf88fa45d32c9174e033f6c1124cf5b5d06f827))
+* Resolve misc bugs handling phases in avm witgen ([#11218](https://github.com/AztecProtocol/aztec-packages/issues/11218)) ([29bc4bd](https://github.com/AztecProtocol/aztec-packages/commit/29bc4bdd5b59ee1050951e0c143654ef3cdd25b0))
+* Sequencer timetable accounts for spare time ([#11221](https://github.com/AztecProtocol/aztec-packages/issues/11221)) ([f1b9211](https://github.com/AztecProtocol/aztec-packages/commit/f1b92112b7063af80044a2b3bc6daa98a8446d9f))
+
+
+### Miscellaneous
+
+* Attestation collection times out based on sequencer timetable ([#11248](https://github.com/AztecProtocol/aztec-packages/issues/11248)) ([946a418](https://github.com/AztecProtocol/aztec-packages/commit/946a418d138c1b2bee3a5dc14096616a902cc0b7))
+* Delete external-ci-approved.yml ([#11258](https://github.com/AztecProtocol/aztec-packages/issues/11258)) ([642bce6](https://github.com/AztecProtocol/aztec-packages/commit/642bce68a3e0eea29fa3ebb8c11cf4af02fe992b))
+* Demote error closing forks to warn ([#11263](https://github.com/AztecProtocol/aztec-packages/issues/11263)) ([a5b7a6a](https://github.com/AztecProtocol/aztec-packages/commit/a5b7a6ae4ec9fbe68cfd5b8216a5a4501077baa0))
+* Fixing `[@safety](https://github.com/safety)` warnings ([#11094](https://github.com/AztecProtocol/aztec-packages/issues/11094)) ([5de24e0](https://github.com/AztecProtocol/aztec-packages/commit/5de24e017afe9b5bd165a44caa7c96a6d5657589))
+* Move shared pcs functionality to internal library in solidity and small refactorings in sumcheck ([#11230](https://github.com/AztecProtocol/aztec-packages/issues/11230)) ([507ae9d](https://github.com/AztecProtocol/aztec-packages/commit/507ae9df9c369603da20f25ccc228729ee2733cd))
+* Replace relative paths to noir-protocol-circuits ([be42305](https://github.com/AztecProtocol/aztec-packages/commit/be42305eb8ebcb1383219efd2e72725169bbb41f))
+* Retry deploys ([#11252](https://github.com/AztecProtocol/aztec-packages/issues/11252)) ([23cfbb4](https://github.com/AztecProtocol/aztec-packages/commit/23cfbb410fddccae83031d39e867bc47241af2f5))
+* Silence "Updated proven chain" log ([#11250](https://github.com/AztecProtocol/aztec-packages/issues/11250)) ([44bd79b](https://github.com/AztecProtocol/aztec-packages/commit/44bd79b7e27d9610568f14c109b22cf7e36fe298))
+* Silence circuit return values in CI ([#11259](https://github.com/AztecProtocol/aztec-packages/issues/11259)) ([db3d860](https://github.com/AztecProtocol/aztec-packages/commit/db3d860992eae972c8f7d1db2daf66673d83fb4b))
+
 ## [0.70.0](https://github.com/AztecProtocol/aztec-packages/compare/aztec-packages-v0.69.1...aztec-packages-v0.70.0) (2025-01-15)
 
 
